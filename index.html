@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Accesos - ZFA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Supabase JS Client v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS para exportar a Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Navigation -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <div class="logo-placeholder">ZFA</div>
+                <h1 class="sidebar-title">ZONA FRANCA SANTAFESINA</h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-target="registros-tab">
+                    <!-- Icon: Clipboard list -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: text-bottom;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path></svg> 
+                    Registros
+                </button>
+                <button class="nav-btn" data-target="nomina-tab">
+                    <!-- Icon: Users -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: text-bottom;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    Nómina
+                </button>
+            </nav>
+
+            <!-- Estado de Base de Datos -->
+            <div class="sidebar-footer">
+                <div class="db-status-card">
+                    <div class="db-status-indicator">
+                        <span class="db-dot" id="db-status-dot"></span>
+                        <div class="db-info">
+                            <span class="db-title">Base de Datos</span>
+                            <span class="db-label" id="db-status-text">Verificando...</span>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-open-db-config" class="btn-db-config" title="Configurar conexión con Supabase">
+                        ⚙️ Configurar
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Pestaña Registros -->
+            <section id="registros-tab" class="tab-pane active">
+                <header class="page-header">
+                    <h2>Control Ingreso y Egreso</h2>
+                    <div class="header-controls">
+                        <div class="control-group">
+                            <label>Portero:</label>
+                            <input type="text" id="portero-input" placeholder="Nombre...">
+                        </div>
+                        <div class="control-group">
+                            <label>Fecha:</label>
+                            <input type="date" id="fecha-input">
+                        </div>
+                        <div class="control-group">
+                            <label>Turno:</label>
+                            <select id="turno-input">
+                                <option value="06 - 18">06 - 18</option>
+                                <option value="18 - 06">18 - 06</option>
+                            </select>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="card add-record-card">
+                    <h3>Nuevo Registro</h3>
+                    <form id="registro-form" class="inline-form">
+                        <div class="form-group search-group">
+                            <label>Buscar Persona en Nómina</label>
+                            <input type="text" id="search-persona" placeholder="Escriba nombre o DNI..." autocomplete="off">
+                            <div id="autocomplete-results" class="autocomplete-dropdown hidden"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>D.N.I./Legajo</label>
+                            <input type="text" id="reg-dni" readonly tabindex="-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Empresa</label>
+                            <input type="text" id="reg-empresa" readonly tabindex="-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Dominio</label>
+                            <input type="text" id="reg-dominio" readonly tabindex="-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Observaciones</label>
+                            <input type="text" id="reg-observaciones" placeholder="Opcional">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="btn-ingreso" class="btn btn-primary" disabled>Marcar Ingreso</button>
+                            <button type="button" id="btn-egreso" class="btn btn-secondary" disabled>Marcar Egreso</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card table-card">
+                    <div class="table-header">
+                        <h3>Movimientos del Día</h3>
+                        <button id="btn-export" class="btn btn-outline">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Exportar a Excel
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="registros-table">
+                            <thead>
+                                <tr>
+                                    <th>Apellido y Nombre</th>
+                                    <th>D.N.I./Legajo</th>
+                                    <th>Empresa</th>
+                                    <th>Dominio</th>
+                                    <th>Fecha</th>
+                                    <th>Ingreso</th>
+                                    <th>Egreso</th>
+                                    <th>Observaciones</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Rows generated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Pestaña Nómina -->
+            <section id="nomina-tab" class="tab-pane">
+                <header class="page-header">
+                    <h2>Nómina de Personal Autorizado</h2>
+                </header>
+
+                <div class="card form-card">
+                    <h3>Agregar/Editar Persona</h3>
+                    <form id="nomina-form" class="inline-form">
+                        <input type="hidden" id="nom-id">
+                        <div class="form-group">
+                            <label>Apellido y Nombre *</label>
+                            <input type="text" id="nom-nombre" required>
+                        </div>
+                        <div class="form-group">
+                            <label>D.N.I. / Legajo *</label>
+                            <input type="text" id="nom-dni" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Empresa *</label>
+                            <input type="text" id="nom-empresa" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Dominio (Vehículo)</label>
+                            <input type="text" id="nom-dominio">
+                        </div>
+                        <div class="form-actions self-end">
+                            <button type="submit" class="btn btn-primary" id="btn-save-nom">Guardar en Nómina</button>
+                            <button type="button" id="btn-cancel-nom" class="btn btn-outline hidden">Cancelar Edición</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card table-card">
+                    <div class="table-header">
+                        <h3>Base de Datos</h3>
+                        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                            <input type="text" id="filter-nomina" placeholder="Buscar por nombre, DNI o empresa..." class="search-input">
+                            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                            <button id="btn-import-csv" class="btn btn-outline" title="Importar personas desde CSV">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: text-bottom;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Importar CSV
+                            </button>
+                            <button id="btn-quick-sync" class="btn btn-outline" title="Sincronizar nómina local con la base de datos Supabase">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: text-bottom;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                                Sincronizar Supabase
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="nomina-table">
+                            <thead>
+                                <tr>
+                                    <th>Apellido y Nombre</th>
+                                    <th>D.N.I. / Legajo</th>
+                                    <th>Empresa</th>
+                                    <th>Dominio</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Rows generated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal de Configuración de Supabase -->
+    <div id="db-modal" class="modal-backdrop hidden">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title">Conexión a Base de Datos (Supabase)</h3>
+                    <p class="modal-subtitle">Conecta con tu proyecto en la nube para persistir datos y acceder desde cualquier lugar.</p>
+                </div>
+                <button type="button" id="btn-close-db-modal" class="btn-close" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="cfg-supabase-url">URL del Proyecto Supabase</label>
+                    <input type="url" id="cfg-supabase-url" placeholder="https://tu-id-proyecto.supabase.co" autocomplete="off">
+                    <small class="form-hint">Obtenla en Supabase &gt; Project Settings &gt; API &gt; Project URL</small>
+                </div>
+                <div class="form-group">
+                    <label for="cfg-supabase-key">Project Anon / Public API Key</label>
+                    <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off">
+                    <small class="form-hint">Obtenla en Supabase &gt; Project Settings &gt; API &gt; Project API keys (anon / public)</small>
+                </div>
+
+                <div id="db-alert" class="db-alert hidden"></div>
+
+                <div class="db-sync-section">
+                    <h4>Sincronización Inicial</h4>
+                    <p>Si tienes personal en tu navegador o archivo CSV local, puedes subirlo a Supabase en un solo clic:</p>
+                    <button type="button" id="btn-sync-to-cloud" class="btn btn-outline" style="width: 100%; margin-top: 0.5rem;">
+                        Subir Nómina Local a Supabase Cloud
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-test-db" class="btn btn-outline">Probar Conexión</button>
+                <button type="button" id="btn-save-db-config" class="btn btn-primary">Guardar Credenciales</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts de la Aplicación -->
+    <script src="config.js"></script>
+    <script src="supabaseClient.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
