@@ -53,15 +53,47 @@ const DB = {
         return this.init();
     },
 
-    // Probar conexión contra la base de datos
+    // Probar conexión y permisos contra la base de datos (Lectura + Escritura)
     async testConnection() {
         if (!this.client && !this.init()) {
             return { success: false, message: 'Faltan credenciales (URL y Anon Key).' };
         }
         try {
-            const { error } = await this.client.from('nomina').select('id', { count: 'exact', head: true });
-            if (error) throw error;
-            return { success: true, message: 'Conexión establecida exitosamente con Supabase.' };
+            // 1. Probar lectura en tabla 'nomina'
+            const { error: readErr } = await this.client.from('nomina').select('id', { count: 'exact', head: true });
+            if (readErr) {
+                return {
+                    success: false,
+                    isPermissionError: true,
+                    message: `Error al leer la tabla nomina: ${readErr.message} (Código ${readErr.code || 'RLS'}). Verifica la tabla en Supabase.`
+                };
+            }
+
+            // 2. Probar permisos de escritura (upsert de comprobación)
+            const testId = '__test_permiso__' + Math.random().toString(36).substring(2, 7);
+            const { error: writeErr } = await this.client.from('nomina').upsert([{
+                id: testId,
+                nombre: '__PING_TEST__',
+                dni: '000',
+                empresa: 'TEST',
+                dominio: ''
+            }]);
+
+            if (writeErr) {
+                return {
+                    success: false,
+                    isPermissionError: true,
+                    message: `⚠️ Conexión establecida pero FALLARON LOS PERMISOS DE ESCRITURA: ${writeErr.message} (Código: ${writeErr.code || '42501'}). Ejecuta el script SQL en Supabase para conceder permisos.`
+                };
+            }
+
+            // 3. Limpiar registro de prueba
+            await this.client.from('nomina').delete().eq('id', testId);
+
+            return { 
+                success: true, 
+                message: 'Conexión y permisos verificados exitosamente: Lectura y escritura activas.' 
+            };
         } catch (err) {
             return { success: false, message: err.message || 'Error al conectar con Supabase.' };
         }
@@ -85,7 +117,7 @@ const DB = {
     },
 
     async savePersona(persona) {
-        if (!this.client) return null;
+        if (!this.client) throw new Error("Base de datos no conectada");
         try {
             const { data, error } = await this.client
                 .from('nomina')
@@ -93,7 +125,7 @@ const DB = {
                 .select();
 
             if (error) throw error;
-            return data[0];
+            return data && data.length > 0 ? data[0] : persona;
         } catch (err) {
             console.error("Error al guardar persona en Supabase:", err);
             throw err;
@@ -101,7 +133,7 @@ const DB = {
     },
 
     async deletePersona(id) {
-        if (!this.client) return null;
+        if (!this.client) throw new Error("Base de datos no conectada");
         try {
             const { error } = await this.client
                 .from('nomina')
@@ -155,7 +187,7 @@ const DB = {
     },
 
     async addRegistro(rec) {
-        if (!this.client) return null;
+        if (!this.client) throw new Error("Base de datos no conectada");
         try {
             const { data, error } = await this.client
                 .from('registros')
@@ -163,7 +195,7 @@ const DB = {
                 .select();
 
             if (error) throw error;
-            return data[0];
+            return data && data.length > 0 ? data[0] : rec;
         } catch (err) {
             console.error("Error al agregar registro en Supabase:", err);
             throw err;
@@ -171,7 +203,7 @@ const DB = {
     },
 
     async updateRegistroEgreso(id, egreso, observaciones) {
-        if (!this.client) return null;
+        if (!this.client) throw new Error("Base de datos no conectada");
         try {
             const payload = { egreso };
             if (observaciones !== undefined) payload.observaciones = observaciones;
@@ -183,7 +215,7 @@ const DB = {
                 .select();
 
             if (error) throw error;
-            return data[0];
+            return data && data.length > 0 ? data[0] : null;
         } catch (err) {
             console.error("Error al actualizar egreso en Supabase:", err);
             throw err;
@@ -191,7 +223,7 @@ const DB = {
     },
 
     async deleteRegistro(id) {
-        if (!this.client) return null;
+        if (!this.client) throw new Error("Base de datos no conectada");
         try {
             const { error } = await this.client
                 .from('registros')
@@ -211,7 +243,11 @@ const DB = {
         if (!this.client) return;
 
         if (this.realtimeSubscription) {
-            this.client.removeChannel(this.realtimeSubscription);
+            try {
+                this.client.removeChannel(this.realtimeSubscription);
+            } catch (e) {
+                console.warn("Canal previo no removido:", e);
+            }
         }
 
         this.realtimeSubscription = this.client

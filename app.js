@@ -25,6 +25,9 @@ const regDominio = document.getElementById('reg-dominio');
 const regObservaciones = document.getElementById('reg-observaciones');
 const btnIngreso = document.getElementById('btn-ingreso');
 const btnEgreso = document.getElementById('btn-egreso');
+const btnCancelReg = document.getElementById('btn-cancel-reg');
+const newPersonBadge = document.getElementById('new-person-badge');
+const quickAddHelp = document.getElementById('quick-add-help');
 
 // Elementos DOM del Estado de Base de Datos y Modal
 const dbStatusDot = document.getElementById('db-status-dot');
@@ -39,9 +42,49 @@ const btnSaveDbConfig = document.getElementById('btn-save-db-config');
 const btnSyncToCloud = document.getElementById('btn-sync-to-cloud');
 const btnQuickSync = document.getElementById('btn-quick-sync');
 const dbAlert = document.getElementById('db-alert');
+const btnToggleSql = document.getElementById('btn-toggle-sql');
+const sqlScriptContainer = document.getElementById('sql-script-container');
+const sqlTextSnippet = document.getElementById('sql-text-snippet');
+const btnCopySql = document.getElementById('btn-copy-sql');
 
 let selectedPersona = null;
+let isNewPersonaMode = false;
 let isCloudOnline = false;
+
+// Snippet SQL para mostrar en el modal y copiar fácilmente
+const SQL_PERMISSIONS_SNIPPET = `-- Ejecuta este script en Supabase SQL Editor para habilitar permisos totales:
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.nomina TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.registros TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+
+ALTER TABLE public.nomina ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.registros ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Acceso total a nomina" ON public.nomina;
+CREATE POLICY "Acceso total a nomina" ON public.nomina FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acceso total a registros" ON public.registros;
+CREATE POLICY "Acceso total a registros" ON public.registros FOR ALL TO public USING (true) WITH CHECK (true);`;
+
+// ==============================================================================
+// SISTEMA DE NOTIFICACIONES FLOTANTES (TOAST)
+// ==============================================================================
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4500);
+}
 
 // ==============================================================================
 // INICIALIZACIÓN
@@ -57,6 +100,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (localStorage.getItem('zfa_turno')) {
         turnoInput.value = localStorage.getItem('zfa_turno');
+    }
+
+    // Configurar snippet SQL
+    if (sqlTextSnippet) {
+        sqlTextSnippet.value = SQL_PERMISSIONS_SNIPPET;
     }
 
     // Renderizar datos iniciales desde caché
@@ -126,7 +174,10 @@ async function setupDatabaseConnection() {
     } else {
         isCloudOnline = false;
         updateDbStatusUI('error', 'Error Conexión');
-        console.warn("No se pudo conectar con Supabase:", test.message);
+        console.warn("No se pudo conectar o faltan permisos en Supabase:", test.message);
+        if (test.isPermissionError) {
+            showToast("⚠️ Faltan permisos en Supabase. Haz clic en Configurar -> Ver Script SQL", "warning");
+        }
     }
 }
 
@@ -147,7 +198,15 @@ async function reloadNominaFromCloud() {
     try {
         const cloudNomina = await DB.getNomina();
         if (cloudNomina && Array.isArray(cloudNomina)) {
-            nomina = cloudNomina;
+            // Combinar nómina de la nube con local para no perder nuevos ingresos locales no sincronizados
+            const cloudMap = new Map(cloudNomina.map(p => [p.id, p]));
+            const merged = [...cloudNomina];
+            nomina.forEach(localP => {
+                if (!cloudMap.has(localP.id)) {
+                    merged.push(localP);
+                }
+            });
+            nomina = merged;
             saveNominaLocal();
             renderNomina();
         }
@@ -263,19 +322,23 @@ btnTestDb.addEventListener('click', async () => {
     }
 
     btnTestDb.disabled = true;
-    btnTestDb.textContent = 'Probando...';
+    btnTestDb.textContent = 'Probando permisos...';
     
     // Probar temporalmente
     DB.saveCredentials(url, key);
     const test = await DB.testConnection();
 
     btnTestDb.disabled = false;
-    btnTestDb.textContent = 'Probar Conexión';
+    btnTestDb.textContent = 'Probar Conexión y Permisos';
 
     if (test.success) {
         showDbAlert('✓ ' + test.message, 'success');
     } else {
-        showDbAlert('✕ ' + test.message, 'error');
+        showDbAlert((test.isPermissionError ? '⚠️ ' : '✕ ') + test.message, 'error');
+        if (test.isPermissionError && sqlScriptContainer) {
+            sqlScriptContainer.classList.remove('hidden');
+            if (btnToggleSql) btnToggleSql.textContent = 'Ocultar Script SQL';
+        }
     }
 });
 
@@ -292,6 +355,34 @@ function showDbAlert(message, type) {
     dbAlert.className = `db-alert ${type}`;
     dbAlert.textContent = message;
     dbAlert.classList.remove('hidden');
+}
+
+// Alternar visualización del script SQL de permisos
+if (btnToggleSql && sqlScriptContainer) {
+    btnToggleSql.addEventListener('click', () => {
+        sqlScriptContainer.classList.toggle('hidden');
+        btnToggleSql.textContent = sqlScriptContainer.classList.contains('hidden') ? 'Ver Script SQL' : 'Ocultar Script SQL';
+    });
+}
+
+// Botón para copiar SQL al portapapeles
+if (btnCopySql && sqlTextSnippet) {
+    btnCopySql.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(sqlTextSnippet.value);
+            btnCopySql.textContent = '✓ ¡Copiado al Portapapeles!';
+            setTimeout(() => {
+                btnCopySql.textContent = '📋 Copiar SQL al Portapapeles';
+            }, 2500);
+        } catch (err) {
+            sqlTextSnippet.select();
+            document.execCommand('copy');
+            btnCopySql.textContent = '✓ ¡Copiado!';
+            setTimeout(() => {
+                btnCopySql.textContent = '📋 Copiar SQL al Portapapeles';
+            }, 2500);
+        }
+    });
 }
 
 // Sincronizar nómina local hacia Supabase
@@ -320,11 +411,13 @@ async function syncLocalNominaToCloud() {
         });
 
         showDbAlert(`✓ ¡Éxito! Se sincronizaron ${nomina.length} personas en Supabase.`, 'success');
+        showToast(`✓ Se sincronizaron ${nomina.length} personas en Supabase`, 'success');
         isCloudOnline = true;
         updateDbStatusUI('online', 'Supabase Conectado');
         await reloadNominaFromCloud();
     } catch (err) {
-        showDbAlert(`Error al sincronizar: ${err.message}`, 'error');
+        showDbAlert(`Error al sincronizar: ${err.message}. Verifica los permisos SQL en Supabase.`, 'error');
+        showToast(`Error al sincronizar: ${err.message}`, 'error');
     } finally {
         if (btnSyncToCloud) btnSyncToCloud.disabled = false;
         if (btnQuickSync) btnQuickSync.disabled = false;
@@ -374,10 +467,14 @@ nominaForm.addEventListener('submit', async (e) => {
     if (isCloudOnline) {
         try {
             await DB.savePersona(person);
+            showToast(`✓ "${person.nombre}" guardado y sincronizado en Supabase`, 'success');
         } catch (err) {
             console.error("Error al persistir persona en Supabase:", err);
-            alert("Se guardó en memoria local pero hubo un error con la nube: " + err.message);
+            showToast(`⚠️ Guardado local, pero falló en Supabase: ${err.message}`, 'error');
+            alert(`⚠️ Se guardó en la nómina local, pero la base de datos Supabase rechazó la operación:\n\n${err.message}\n\nSi es un error de permisos (RLS / 42501), ve a Configurar -> Ver Script SQL y ejecútalo en Supabase.`);
         }
+    } else {
+        showToast(`✓ "${person.nombre}" guardado en nómina local`, 'info');
     }
 });
 
@@ -452,8 +549,10 @@ window.deletePersona = async (id) => {
         if (isCloudOnline) {
             try {
                 await DB.deletePersona(id);
+                showToast("✓ Persona eliminada de Supabase", "info");
             } catch (err) {
                 console.error("Error al borrar en Supabase:", err);
+                showToast("⚠️ Eliminado localmente pero falló en Supabase: " + err.message, "error");
             }
         }
     }
@@ -489,11 +588,28 @@ searchPersona.addEventListener('input', (e) => {
             });
             autocompleteResults.appendChild(div);
         });
+
+        // Opción al final para ingresar como nueva persona no listada
+        const newDiv = document.createElement('div');
+        newDiv.className = 'autocomplete-item';
+        newDiv.style.backgroundColor = '#f0f9ff';
+        newDiv.style.color = '#0284c7';
+        newDiv.innerHTML = `<strong>+ ¿Persona no listada?</strong> <small>Clic aquí para registrar a <strong>"${e.target.value.toUpperCase()}"</strong> como Nuevo Ingreso</small>`;
+        newDiv.addEventListener('click', () => {
+            enableNewPersonaMode(e.target.value.toUpperCase());
+        });
+        autocompleteResults.appendChild(newDiv);
+
         autocompleteResults.classList.remove('hidden');
     } else {
         const div = document.createElement('div');
         div.className = 'autocomplete-item';
-        div.innerHTML = `<small><em>No se encontró en nómina.</em></small>`;
+        div.style.backgroundColor = '#f0f9ff';
+        div.style.color = '#0284c7';
+        div.innerHTML = `<strong>+ Persona no encontrada en Nómina</strong><br><small>Clic aquí para registrar a <strong>"${e.target.value.toUpperCase()}"</strong> como Nuevo Ingreso y agregarla a Nómina</small>`;
+        div.addEventListener('click', () => {
+            enableNewPersonaMode(e.target.value.toUpperCase());
+        });
         autocompleteResults.appendChild(div);
         autocompleteResults.classList.remove('hidden');
     }
@@ -507,16 +623,33 @@ document.addEventListener('click', (e) => {
 });
 
 function selectPersona(p) {
+    isNewPersonaMode = false;
     selectedPersona = p;
     searchPersona.value = p.nombre;
+    
     regDni.value = p.dni || '';
+    regDni.setAttribute('readonly', 'true');
+    regDni.setAttribute('tabindex', '-1');
+
     regEmpresa.value = p.empresa || '';
+    regEmpresa.setAttribute('readonly', 'true');
+    regEmpresa.setAttribute('tabindex', '-1');
+
     regDominio.value = p.dominio || '';
+    regDominio.setAttribute('readonly', 'true');
+    regDominio.setAttribute('tabindex', '-1');
+
+    if (newPersonBadge) newPersonBadge.classList.add('hidden');
+    if (quickAddHelp) quickAddHelp.classList.add('hidden');
+    if (btnCancelReg) btnCancelReg.classList.remove('hidden');
+    
     autocompleteResults.classList.add('hidden');
     
     const fechaFormat = getFormattedDateFromInput(fechaInput.value);
     const existingIndex = registros.findIndex(r => r.persona_id === p.id && r.fecha === fechaFormat && !r.egreso);
     
+    btnIngreso.textContent = 'Marcar Ingreso';
+
     if (existingIndex > -1) {
         // Está dentro: Deshabilitar ingreso, habilitar egreso
         btnIngreso.disabled = true;
@@ -530,15 +663,69 @@ function selectPersona(p) {
     }
 }
 
+function enableNewPersonaMode(nombre) {
+    isNewPersonaMode = true;
+    selectedPersona = null;
+    autocompleteResults.classList.add('hidden');
+
+    searchPersona.value = (nombre || searchPersona.value).toUpperCase().trim();
+
+    // Habilitar campos para edición
+    regDni.removeAttribute('readonly');
+    regDni.removeAttribute('tabindex');
+    regDni.placeholder = 'Ingresa DNI / Legajo...';
+
+    regEmpresa.removeAttribute('readonly');
+    regEmpresa.removeAttribute('tabindex');
+    regEmpresa.placeholder = 'Ingresa Empresa...';
+
+    regDominio.removeAttribute('readonly');
+    regDominio.removeAttribute('tabindex');
+    regDominio.placeholder = 'Patente (opcional)...';
+
+    btnIngreso.disabled = false;
+    btnIngreso.textContent = 'Marcar Ingreso y Guardar en Nómina';
+    btnEgreso.disabled = true;
+
+    if (newPersonBadge) newPersonBadge.classList.remove('hidden');
+    if (quickAddHelp) quickAddHelp.classList.remove('hidden');
+    if (btnCancelReg) btnCancelReg.classList.remove('hidden');
+
+    regDni.focus();
+}
+
 function clearRecordForm() {
     selectedPersona = null;
+    isNewPersonaMode = false;
     searchPersona.value = '';
+
     regDni.value = '';
+    regDni.setAttribute('readonly', 'true');
+    regDni.setAttribute('tabindex', '-1');
+    regDni.placeholder = 'DNI...';
+
     regEmpresa.value = '';
+    regEmpresa.setAttribute('readonly', 'true');
+    regEmpresa.setAttribute('tabindex', '-1');
+    regEmpresa.placeholder = 'Empresa...';
+
     regDominio.value = '';
+    regDominio.setAttribute('readonly', 'true');
+    regDominio.setAttribute('tabindex', '-1');
+    regDominio.placeholder = 'Patente...';
+
     regObservaciones.value = '';
     btnIngreso.disabled = true;
+    btnIngreso.textContent = 'Marcar Ingreso';
     btnEgreso.disabled = true;
+
+    if (newPersonBadge) newPersonBadge.classList.add('hidden');
+    if (quickAddHelp) quickAddHelp.classList.add('hidden');
+    if (btnCancelReg) btnCancelReg.classList.add('hidden');
+}
+
+if (btnCancelReg) {
+    btnCancelReg.addEventListener('click', clearRecordForm);
 }
 
 function getFormattedTime() {
@@ -556,7 +743,7 @@ btnIngreso.addEventListener('click', () => addRecord('ingreso'));
 btnEgreso.addEventListener('click', () => addRecord('egreso'));
 
 async function addRecord(tipo) {
-    if (!selectedPersona) return;
+    if (!selectedPersona && !isNewPersonaMode) return;
 
     if (!porteroInput.value.trim()) {
         alert("Por favor, ingrese el nombre del Portero antes de registrar.");
@@ -566,7 +753,86 @@ async function addRecord(tipo) {
 
     const fechaIso = fechaInput.value;
     const fechaFormat = getFormattedDateFromInput(fechaIso);
-    
+
+    // -------------------------------------------------------------
+    // CASO 1: NUEVO INGRESO (Persona no registrada en nómina)
+    // -------------------------------------------------------------
+    if (isNewPersonaMode && tipo === 'ingreso') {
+        const nombreVal = searchPersona.value.toUpperCase().trim();
+        const dniVal = regDni.value.toUpperCase().trim() || 'S/D';
+        const empresaVal = regEmpresa.value.toUpperCase().trim() || 'S/E';
+        const dominioVal = regDominio.value.toUpperCase().trim();
+
+        if (!nombreVal) {
+            alert("Por favor ingrese el nombre y apellido.");
+            searchPersona.focus();
+            return;
+        }
+
+        // 1. Guardar nueva persona en la Nómina
+        const newPersona = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+            nombre: nombreVal,
+            dni: dniVal,
+            empresa: empresaVal,
+            dominio: dominioVal
+        };
+
+        nomina.push(newPersona);
+        saveNominaLocal();
+        renderNomina();
+
+        if (isCloudOnline) {
+            try {
+                await DB.savePersona(newPersona);
+                showToast(`✓ "${newPersona.nombre}" incorporado a Nómina en Supabase`, 'success');
+            } catch (err) {
+                console.error("Error al persistir persona nueva en Supabase:", err);
+                showToast(`⚠️ Guardado en nómina local, pero falló en la nube: ${err.message}`, 'error');
+            }
+        }
+
+        // 2. Registrar movimiento de ingreso
+        const rec = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+            persona_id: newPersona.id,
+            nombre: newPersona.nombre,
+            dni: newPersona.dni,
+            empresa: newPersona.empresa,
+            dominio: newPersona.dominio,
+            fecha: fechaFormat,
+            ingreso: getFormattedTime(),
+            egreso: '',
+            observaciones: regObservaciones.value || '',
+            portero: porteroInput.value.trim(),
+            turno: turnoInput.value,
+            fecha_iso: fechaIso 
+        };
+
+        registros.push(rec);
+        saveRegistrosLocal();
+        renderRegistros();
+
+        if (isCloudOnline) {
+            try {
+                await DB.addRegistro(rec);
+                showToast(`✓ Ingreso de "${rec.nombre}" registrado en Supabase`, 'success');
+            } catch (err) {
+                console.error("Error al insertar ingreso en Supabase:", err);
+                showToast(`⚠️ Ingreso guardado localmente, pero falló en la nube: ${err.message}`, 'error');
+            }
+        } else {
+            showToast(`✓ Ingreso registrado y persona agregada a la nómina local`, 'info');
+        }
+
+        clearRecordForm();
+        searchPersona.focus();
+        return;
+    }
+
+    // -------------------------------------------------------------
+    // CASO 2: PERSONA EXISTENTE EN NÓMINA
+    // -------------------------------------------------------------
     let existingRecordIndex = registros.findIndex(r => r.persona_id === selectedPersona.id && r.fecha === fechaFormat && !r.egreso);
     
     if (tipo === 'egreso' && existingRecordIndex > -1) {
@@ -589,9 +855,13 @@ async function addRecord(tipo) {
         if (isCloudOnline) {
             try {
                 await DB.updateRegistroEgreso(targetRecord.id, targetRecord.egreso, targetRecord.observaciones);
+                showToast(`✓ Egreso de "${targetRecord.nombre}" actualizado en Supabase`, 'success');
             } catch (err) {
                 console.error("Error al actualizar egreso en Supabase:", err);
+                showToast(`⚠️ Egreso guardado localmente, pero falló en la nube: ${err.message}`, 'error');
             }
+        } else {
+            showToast(`✓ Egreso de "${targetRecord.nombre}" registrado localmente`, 'info');
         }
     } else if (tipo === 'ingreso') {
         const rec = {
@@ -617,9 +887,13 @@ async function addRecord(tipo) {
         if (isCloudOnline) {
             try {
                 await DB.addRegistro(rec);
+                showToast(`✓ Ingreso de "${rec.nombre}" registrado en Supabase`, 'success');
             } catch (err) {
                 console.error("Error al insertar ingreso en Supabase:", err);
+                showToast(`⚠️ Ingreso guardado localmente, pero falló en la nube: ${err.message}`, 'error');
             }
+        } else {
+            showToast(`✓ Ingreso de "${rec.nombre}" registrado localmente`, 'info');
         }
     }
 
@@ -676,8 +950,10 @@ window.marcarEgresoAtrasado = async (id) => {
         if (isCloudOnline) {
             try {
                 await DB.updateRegistroEgreso(id, horaEgreso, registros[index].observaciones);
+                showToast("✓ Egreso actualizado en Supabase", "success");
             } catch (err) {
                 console.error("Error al actualizar egreso en Supabase:", err);
+                showToast("⚠️ Actualizado localmente pero falló en Supabase: " + err.message, "error");
             }
         }
     }
@@ -692,8 +968,10 @@ window.deleteRegistro = async (id) => {
         if (isCloudOnline) {
             try {
                 await DB.deleteRegistro(id);
+                showToast("✓ Registro eliminado de Supabase", "info");
             } catch (err) {
                 console.error("Error al eliminar registro en Supabase:", err);
+                showToast("⚠️ Eliminado localmente pero falló en Supabase: " + err.message, "error");
             }
         }
     }
@@ -843,8 +1121,10 @@ async function processCSV(csvText) {
             try {
                 await DB.importNominaBatch(importedBatch);
                 alert("✓ ¡Sincronizado con Supabase con éxito!");
+                showToast("✓ Nómina sincronizada con Supabase", "success");
             } catch (err) {
-                alert("Error al subir a Supabase: " + err.message);
+                alert("Error al subir a Supabase: " + err.message + "\n\nVerifica los permisos en Supabase SQL Editor.");
+                showToast("Error al sincronizar con Supabase", "error");
             }
         }
     } else {

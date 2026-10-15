@@ -1,6 +1,13 @@
 -- ==============================================================================
--- SCHEMA PARA CONTROL DE ACCESOS ZONA FRANCA SANTAFESINA (ZFA)
--- Ejecuta este script completo en el SQL Editor de tu proyecto en Supabase
+-- SCHEMA Y PERMISOS PARA CONTROL DE ACCESOS ZONA FRANCA SANTAFESINA (ZFA)
+-- ==============================================================================
+-- Instrucciones de aplicación:
+-- 1. Inicia sesión en tu cuenta de Supabase (https://supabase.com).
+-- 2. Entra a tu proyecto -> SQL Editor (en el menú lateral izquierdo).
+-- 3. Haz clic en "New query", pega TODO este contenido y presiona "Run".
+-- 4. Este script crea las tablas, índices, habilita Realtime y garantiza
+--    los permisos de lectura, inserción, actualización y borrado (GRANT + RLS)
+--    tanto para el rol anónimo (anon) como autenticado (authenticated).
 -- ==============================================================================
 
 -- 1. TABLA NÓMINA (Personal Autorizado)
@@ -43,29 +50,59 @@ CREATE INDEX IF NOT EXISTS idx_registros_persona ON public.registros (persona_id
 CREATE INDEX IF NOT EXISTS idx_registros_egreso ON public.registros (egreso);
 
 
--- 3. HABILITAR SEGURIDAD A NIVEL DE FILAS (Row Level Security - RLS)
+-- ==============================================================================
+-- 3. PERMISOS DE TABLA EN POSTGRESQL (CRÍTICO PARA RESOLVER ERROR 42501)
+-- ==============================================================================
+-- Sin estos GRANTs explícitos, PostgreSQL rechaza las inserciones con "permission denied"
+-- antes incluso de evaluar las políticas RLS.
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.nomina TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.registros TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Garantizar permisos automáticos para futuras tablas/secuencias creadas en public
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+
+
+-- ==============================================================================
+-- 4. SEGURIDAD A NIVEL DE FILAS (Row Level Security - RLS)
+-- ==============================================================================
 ALTER TABLE public.nomina ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.registros ENABLE ROW LEVEL SECURITY;
 
--- Políticas para permitir lectura, inserción, actualización y borrado a clientes con anon key
+-- Políticas de Nómina: permitir SELECT, INSERT, UPDATE, DELETE a clientes con anon o authenticated key
 DROP POLICY IF EXISTS "Acceso total anonimo a nomina" ON public.nomina;
-CREATE POLICY "Acceso total anonimo a nomina" 
+DROP POLICY IF EXISTS "Acceso total a nomina" ON public.nomina;
+CREATE POLICY "Acceso total a nomina" 
 ON public.nomina 
 FOR ALL 
-TO anon 
+TO public 
 USING (true) 
 WITH CHECK (true);
 
+-- Políticas de Registros: permitir SELECT, INSERT, UPDATE, DELETE a clientes con anon o authenticated key
 DROP POLICY IF EXISTS "Acceso total anonimo a registros" ON public.registros;
-CREATE POLICY "Acceso total anonimo a registros" 
+DROP POLICY IF EXISTS "Acceso total a registros" ON public.registros;
+CREATE POLICY "Acceso total a registros" 
 ON public.registros 
 FOR ALL 
-TO anon 
+TO public 
 USING (true) 
 WITH CHECK (true);
 
 
--- 4. HABILITAR REALTIME (Para actualización instantánea entre diferentes pantallas)
+-- ==============================================================================
+-- 5. CONFIGURACIÓN DE REPLICA IDENTITY (Para sincronización en tiempo real completa)
+-- ==============================================================================
+ALTER TABLE public.nomina REPLICA IDENTITY FULL;
+ALTER TABLE public.registros REPLICA IDENTITY FULL;
+
+
+-- ==============================================================================
+-- 6. HABILITAR REALTIME (Para actualización instantánea entre diferentes puestos/pantallas)
+-- ==============================================================================
 DO $$
 BEGIN
     IF NOT EXISTS (

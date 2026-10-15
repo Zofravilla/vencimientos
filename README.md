@@ -12,12 +12,15 @@ Sistema web de control de ingresos y egresos de personas y vehículos a la Zona 
    - Ve a **SQL Editor** en el menú izquierdo de Supabase.
    - Abre o copia todo el contenido del archivo [`supabase_schema.sql`](./supabase_schema.sql).
    - Pégalo en el editor y haz clic en **"Run"**.
-   - Esto creará automáticamente las tablas `nomina` y `registros`, configurará los índices, las políticas de seguridad (RLS) y activará **Realtime** para actualizaciones en vivo.
+   - Esto creará automáticamente las tablas `nomina` y `registros`, otorgará los permisos `GRANT` a los roles `anon` y `authenticated`, configurará las políticas de seguridad (RLS) y activará **Realtime** para actualizaciones en vivo.
 
 4. Obtén tus credenciales:
    - Ve a **Project Settings** (el engranaje abajo a la izquierda) > **API**.
    - Copia la **Project URL** (ej: `https://xxxxxxxxxxxx.supabase.co`).
    - Copia la **Project API keys: `anon` / `public`** (clave pública).
+
+> [!IMPORTANT]
+> Si en algún momento la base de datos no guarda nuevos ingresos o personas, vuelve a ejecutar [`supabase_schema.sql`](./supabase_schema.sql) en el **SQL Editor** de Supabase para renovar los permisos `GRANT` y políticas `RLS`.
 
 ---
 
@@ -39,9 +42,22 @@ window.SUPABASE_CONFIG = {
 
 ---
 
-## 📤 Paso 3: Cargar la Nómina Inicial a Supabase
+## 📥 Paso 3: Registrar Nuevos Ingresos y Personal
 
-Una vez conectado:
+El sistema maneja dos formas de dar de alta personal:
+1. **Directamente en la Guardia (Control de Ingreso):**
+   - Escribe el nombre o DNI en el buscador. Si la persona no está en la nómina, el sistema te ofrecerá registrarla como **Nuevo Ingreso**.
+   - Completa su DNI y Empresa en los campos habilitados.
+   - Haz clic en **Marcar Ingreso y Guardar en Nómina**: se registrará su acceso en la guardia y se agregará inmediatamente a la Nómina permanente en Supabase.
+2. **Desde la Pestaña Nómina:**
+   - Ve a la pestaña **Nómina** y utiliza el formulario **Agregar/Editar Persona**.
+   - O importa masivamente tu archivo CSV con el botón **Importar CSV**.
+
+---
+
+## 📤 Paso 4: Sincronizar Nómina Inicial con Supabase
+
+Si ya cuentas con datos locales o CSV:
 1. En la aplicación, ve a la pestaña **Nómina**.
 2. Haz clic en **Importar CSV** y selecciona el archivo [`nomina.csv`](./nomina.csv).
 3. El sistema te preguntará si deseas subirlos automáticamente a Supabase en la nube. Confirma y en segundos tendrás a todo el personal disponible en la base de datos cloud.
@@ -49,7 +65,7 @@ Una vez conectado:
 
 ---
 
-## 🌐 Paso 4: Desplegar en Vercel
+## 🌐 Paso 5: Desplegar en Vercel
 
 El proyecto ya incluye [`vercel.json`](./vercel.json) configurado para desplegarse como sitio estático de alto rendimiento.
 
@@ -71,11 +87,11 @@ Sigue las indicaciones en pantalla y el despliegue estará listo en menos de 1 m
 
 ## 🛠️ Estructura del Proyecto
 
-- `index.html`: Interfaz de usuario responsive (registros, nómina, modal de configuración).
-- `styles.css`: Estilos visuales con paleta corporativa y diseño limpio.
-- `app.js`: Lógica principal de negocio, exportación a Excel e integración con Supabase.
-- `supabaseClient.js`: Adaptador para base de datos Supabase y sincronización en tiempo real.
+- `index.html`: Interfaz de usuario responsive (registros, nómina, modal de configuración, permisos).
+- `styles.css`: Estilos visuales con paleta corporativa, toasts y badges informativos.
+- `app.js`: Lógica principal de negocio, exportación a Excel, flujo de nuevos ingresos e integración con Supabase.
+- `supabaseClient.js`: Adaptador para Supabase con verificación de permisos de lectura y escritura.
 - `config.js`: Variables de configuración de Supabase.
-- `supabase_schema.sql`: Script SQL con las tablas, políticas RLS y soporte Realtime.
+- `supabase_schema.sql`: Script SQL con las tablas, permisos GRANT, políticas RLS y Realtime.
 - `vercel.json`: Reglas de despliegue y seguridad para Vercel.
 - `nomina.csv`: Base de datos de personal y contratistas autorizados.

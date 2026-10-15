@@ -661,3 +661,142 @@ input[readonly] {
     to { opacity: 1; transform: scale(1); }
 }
 
+/* Header flexible en formularios */
+.card-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    border-bottom: 2px solid var(--bg-color);
+    padding-bottom: 0.4rem;
+}
+
+.card-header-flex h3 {
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+/* Badge de Nueva Persona */
+.badge-new {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #e0f2fe;
+    color: #0284c7;
+    font-weight: 600;
+    border: 1px solid #bae6fd;
+    animation: fadeIn 0.2s ease;
+}
+
+/* Aviso para registrar nuevo ingreso en nómina */
+.quick-add-notice {
+    margin-top: 0.75rem;
+    font-size: 12px;
+    color: #0369a1;
+    background: #f0f9ff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #bae6fd;
+    line-height: 1.4;
+    animation: fadeIn 0.2s ease;
+}
+
+/* Estilos de permisos SQL en modal */
+.db-permissions-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius);
+    padding: 0.85rem;
+    background: #f8fafc;
+}
+
+.btn-text-link {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.btn-text-link:hover {
+    color: #004494;
+}
+
+.sql-code-box {
+    width: 100%;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+}
+
+/* Notificaciones Flotantes (Toast) */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.toast {
+    pointer-events: auto;
+    min-width: 280px;
+    max-width: 420px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    animation: slideInUp 0.25s ease-out;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast.success {
+    background-color: #065f46;
+    color: #ffffff;
+}
+
+.toast.error {
+    background-color: #991b1b;
+    color: #ffffff;
+}
+
+.toast.warning {
+    background-color: #92400e;
+    color: #ffffff;
+}
+
+.toast.info {
+    background-color: #0369a1;
+    color: #ffffff;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+

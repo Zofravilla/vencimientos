@@ -76,7 +76,12 @@
                 </header>
 
                 <div class="card add-record-card">
-                    <h3>Nuevo Registro</h3>
+                    <div class="card-header-flex">
+                        <h3>Nuevo Registro</h3>
+                        <div id="new-person-badge" class="badge-new hidden">
+                            ✨ Nueva Persona (Se agregará a Nómina)
+                        </div>
+                    </div>
                     <form id="registro-form" class="inline-form">
                         <div class="form-group search-group">
                             <label>Buscar Persona en Nómina</label>
@@ -85,15 +90,15 @@
                         </div>
                         <div class="form-group">
                             <label>D.N.I./Legajo</label>
-                            <input type="text" id="reg-dni" readonly tabindex="-1">
+                            <input type="text" id="reg-dni" placeholder="DNI..." readonly tabindex="-1">
                         </div>
                         <div class="form-group">
                             <label>Empresa</label>
-                            <input type="text" id="reg-empresa" readonly tabindex="-1">
+                            <input type="text" id="reg-empresa" placeholder="Empresa..." readonly tabindex="-1">
                         </div>
                         <div class="form-group">
                             <label>Dominio</label>
-                            <input type="text" id="reg-dominio" readonly tabindex="-1">
+                            <input type="text" id="reg-dominio" placeholder="Patente..." readonly tabindex="-1">
                         </div>
                         <div class="form-group">
                             <label>Observaciones</label>
@@ -102,8 +107,12 @@
                         <div class="form-actions">
                             <button type="button" id="btn-ingreso" class="btn btn-primary" disabled>Marcar Ingreso</button>
                             <button type="button" id="btn-egreso" class="btn btn-secondary" disabled>Marcar Egreso</button>
+                            <button type="button" id="btn-cancel-reg" class="btn btn-outline action-btn hidden" title="Limpiar formulario">✕ Cancelar</button>
                         </div>
                     </form>
+                    <div id="quick-add-help" class="quick-add-notice hidden">
+                        ℹ️ <strong>Nuevo ingreso no registrado en nómina:</strong> Ingresa DNI y Empresa arriba. Al hacer clic en <strong>Marcar Ingreso</strong> se registrará el acceso y se incorporará automáticamente a la Nómina en la Base de Datos.
+                    </div>
                 </div>
 
                 <div class="card table-card">
@@ -149,19 +158,19 @@
                         <input type="hidden" id="nom-id">
                         <div class="form-group">
                             <label>Apellido y Nombre *</label>
-                            <input type="text" id="nom-nombre" required>
+                            <input type="text" id="nom-nombre" required placeholder="Ej: PEREZ, JUAN">
                         </div>
                         <div class="form-group">
                             <label>D.N.I. / Legajo *</label>
-                            <input type="text" id="nom-dni" required>
+                            <input type="text" id="nom-dni" required placeholder="Ej: 30123456">
                         </div>
                         <div class="form-group">
                             <label>Empresa *</label>
-                            <input type="text" id="nom-empresa" required>
+                            <input type="text" id="nom-empresa" required placeholder="Ej: EMPRESA S.A.">
                         </div>
                         <div class="form-group">
                             <label>Dominio (Vehículo)</label>
-                            <input type="text" id="nom-dominio">
+                            <input type="text" id="nom-dominio" placeholder="Ej: AA123BB">
                         </div>
                         <div class="form-actions self-end">
                             <button type="submit" class="btn btn-primary" id="btn-save-nom">Guardar en Nómina</button>
@@ -231,6 +240,23 @@
 
                 <div id="db-alert" class="db-alert hidden"></div>
 
+                <!-- Sección de Solución de Permisos SQL -->
+                <div class="db-permissions-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600; font-size: 13px;">🔑 Permisos de Base de Datos</span>
+                        <button type="button" id="btn-toggle-sql" class="btn-text-link">Ver Script SQL</button>
+                    </div>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        Si la base de datos rechaza guardar nuevos ingresos o personal, ejecuta este script en Supabase (SQL Editor) para habilitar permisos GRANT y RLS:
+                    </p>
+                    <div id="sql-script-container" class="hidden" style="margin-top: 8px;">
+                        <textarea id="sql-text-snippet" class="sql-code-box" readonly rows="7"></textarea>
+                        <button type="button" id="btn-copy-sql" class="btn btn-outline" style="width: 100%; margin-top: 4px; font-size: 12px;">
+                            📋 Copiar SQL al Portapapeles
+                        </button>
+                    </div>
+                </div>
+
                 <div class="db-sync-section">
                     <h4>Sincronización Inicial</h4>
                     <p>Si tienes personal en tu navegador o archivo CSV local, puedes subirlo a Supabase en un solo clic:</p>
@@ -240,11 +266,14 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" id="btn-test-db" class="btn btn-outline">Probar Conexión</button>
+                <button type="button" id="btn-test-db" class="btn btn-outline">Probar Conexión y Permisos</button>
                 <button type="button" id="btn-save-db-config" class="btn btn-primary">Guardar Credenciales</button>
             </div>
         </div>
     </div>
+
+    <!-- Contenedor de Notificaciones Toast -->
+    <div id="toast-container" class="toast-container"></div>
 
     <!-- Scripts de la Aplicación -->
     <script src="config.js"></script>
