@@ -3,6 +3,22 @@
 // Maneja comunicación en la nube, sincronización en tiempo real y fallback offline
 // ==============================================================================
 
+// Generador de UUID v4 estándar (compatible con columnas UUID de PostgreSQL)
+function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function isValidUUID(str) {
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
 const DB = {
     client: null,
     realtimeSubscription: null,
@@ -69,8 +85,8 @@ const DB = {
                 };
             }
 
-            // 2. Probar permisos de escritura (upsert de comprobación)
-            const testId = '__test_permiso__' + Math.random().toString(36).substring(2, 7);
+            // 2. Probar permisos de escritura con UUID válido
+            const testId = generateUUID();
             const { error: writeErr } = await this.client.from('nomina').upsert([{
                 id: testId,
                 nombre: '__PING_TEST__',
@@ -119,13 +135,18 @@ const DB = {
     async savePersona(persona) {
         if (!this.client) throw new Error("Base de datos no conectada");
         try {
+            const payload = { ...persona };
+            if (!payload.id || !isValidUUID(payload.id)) {
+                payload.id = generateUUID();
+            }
+
             const { data, error } = await this.client
                 .from('nomina')
-                .upsert([persona], { onConflict: 'id' })
+                .upsert([payload], { onConflict: 'id' })
                 .select();
 
             if (error) throw error;
-            return data && data.length > 0 ? data[0] : persona;
+            return data && data.length > 0 ? data[0] : payload;
         } catch (err) {
             console.error("Error al guardar persona en Supabase:", err);
             throw err;
@@ -155,7 +176,14 @@ const DB = {
         let processed = 0;
 
         for (let i = 0; i < total; i += batchSize) {
-            const chunk = personas.slice(i, i + batchSize);
+            const chunk = personas.slice(i, i + batchSize).map(p => {
+                const item = { ...p };
+                if (!item.id || !isValidUUID(item.id)) {
+                    item.id = generateUUID();
+                }
+                return item;
+            });
+
             const { error } = await this.client
                 .from('nomina')
                 .upsert(chunk, { onConflict: 'id' });
@@ -189,13 +217,22 @@ const DB = {
     async addRegistro(rec) {
         if (!this.client) throw new Error("Base de datos no conectada");
         try {
+            const payload = { ...rec };
+            if (!payload.id || !isValidUUID(payload.id)) {
+                payload.id = generateUUID();
+            }
+            // En PostgreSQL, columnas UUID fallan si reciben "" (string vacío). Deben recibir NULL.
+            if (!payload.persona_id || !isValidUUID(payload.persona_id)) {
+                payload.persona_id = null;
+            }
+
             const { data, error } = await this.client
                 .from('registros')
-                .insert([rec])
+                .insert([payload])
                 .select();
 
             if (error) throw error;
-            return data && data.length > 0 ? data[0] : rec;
+            return data && data.length > 0 ? data[0] : payload;
         } catch (err) {
             console.error("Error al agregar registro en Supabase:", err);
             throw err;
@@ -269,6 +306,10 @@ const DB = {
             .subscribe();
     }
 };
+
+// Exportar globalmente generador de UUID
+window.generateUUID = generateUUID;
+window.isValidUUID = isValidUUID;
 
 // Auto-inicializar al cargar
 DB.init();

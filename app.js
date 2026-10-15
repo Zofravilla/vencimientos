@@ -3,9 +3,52 @@
 // Lógica de interfaz, gestión de nómina, control de registros y enlace con Supabase
 // ==============================================================================
 
+// Función auxiliar para obtener UUID válido
+function getUUID() {
+    if (window.generateUUID) return window.generateUUID();
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function checkUUID(str) {
+    if (window.isValidUUID) return window.isValidUUID(str);
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
 // Estado en memoria y caché local
 let nomina = JSON.parse(localStorage.getItem('zfa_nomina')) || [];
 let registros = JSON.parse(localStorage.getItem('zfa_registros')) || [];
+
+// Migración y normalización de IDs en localStorage a UUID estándar
+let idsMigrated = false;
+nomina.forEach(p => {
+    if (!p.id || !checkUUID(p.id)) {
+        const oldId = p.id;
+        p.id = getUUID();
+        registros.forEach(r => {
+            if (r.persona_id === oldId) r.persona_id = p.id;
+        });
+        idsMigrated = true;
+    }
+});
+registros.forEach(r => {
+    if (!r.id || !checkUUID(r.id)) {
+        r.id = getUUID();
+        idsMigrated = true;
+    }
+    if (r.persona_id && !checkUUID(r.persona_id)) {
+        r.persona_id = null;
+        idsMigrated = true;
+    }
+});
+if (idsMigrated) {
+    localStorage.setItem('zfa_nomina', JSON.stringify(nomina));
+    localStorage.setItem('zfa_registros', JSON.stringify(registros));
+}
 
 // Elementos DOM de Navegación
 const navBtns = document.querySelectorAll('.nav-btn');
@@ -445,7 +488,7 @@ nominaForm.addEventListener('submit', async (e) => {
     const isEditing = nomId.value !== '';
     
     const person = {
-        id: isEditing ? nomId.value : (Date.now().toString() + Math.random().toString(36).substr(2, 4)),
+        id: (isEditing && checkUUID(nomId.value)) ? nomId.value : getUUID(),
         nombre: nomNombre.value.toUpperCase().trim(),
         dni: nomDni.value.toUpperCase().trim(),
         empresa: nomEmpresa.value.toUpperCase().trim(),
@@ -769,9 +812,9 @@ async function addRecord(tipo) {
             return;
         }
 
-        // 1. Guardar nueva persona en la Nómina
+        // 1. Guardar nueva persona en la Nómina con UUID válido
         const newPersona = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+            id: getUUID(),
             nombre: nombreVal,
             dni: dniVal,
             empresa: empresaVal,
@@ -794,7 +837,7 @@ async function addRecord(tipo) {
 
         // 2. Registrar movimiento de ingreso
         const rec = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
+            id: getUUID(),
             persona_id: newPersona.id,
             nombre: newPersona.nombre,
             dni: newPersona.dni,
@@ -865,8 +908,8 @@ async function addRecord(tipo) {
         }
     } else if (tipo === 'ingreso') {
         const rec = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
-            persona_id: selectedPersona.id,
+            id: getUUID(),
+            persona_id: (selectedPersona.id && checkUUID(selectedPersona.id)) ? selectedPersona.id : null,
             nombre: selectedPersona.nombre,
             dni: selectedPersona.dni || '',
             empresa: selectedPersona.empresa || '',
@@ -1093,11 +1136,12 @@ async function processCSV(csvText) {
                 existing.nombre = nombre;
                 existing.empresa = empresa || existing.empresa;
                 existing.dominio = dominio || existing.dominio;
+                if (!checkUUID(existing.id)) existing.id = getUUID();
                 importedBatch.push(existing);
                 updatedCount++;
             } else {
                 const newPerson = {
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    id: getUUID(),
                     nombre: nombre,
                     dni: dni,
                     empresa: empresa || '',
