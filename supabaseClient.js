@@ -171,18 +171,32 @@ const DB = {
 
     async importNominaBatch(personas, onProgress) {
         if (!this.client) throw new Error("Supabase no está conectado");
+        
+        // 1. Asegurar UUID válido para todos los registros
+        const validPersonas = (personas || []).map(p => {
+            const item = { ...p };
+            if (!item.id || !isValidUUID(item.id)) {
+                item.id = generateUUID();
+            }
+            return item;
+        });
+
+        // 2. Desduplicar por ID para evitar el error de PostgreSQL:
+        // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniqueById = new Map();
+        validPersonas.forEach(p => {
+            if (p && p.id) {
+                uniqueById.set(p.id, p);
+            }
+        });
+
+        const uniqueList = Array.from(uniqueById.values());
         const batchSize = 100;
-        let total = personas.length;
+        let total = uniqueList.length;
         let processed = 0;
 
         for (let i = 0; i < total; i += batchSize) {
-            const chunk = personas.slice(i, i + batchSize).map(p => {
-                const item = { ...p };
-                if (!item.id || !isValidUUID(item.id)) {
-                    item.id = generateUUID();
-                }
-                return item;
-            });
+            const chunk = uniqueList.slice(i, i + batchSize);
 
             const { error } = await this.client
                 .from('nomina')

@@ -1154,16 +1154,29 @@ async function processCSV(csvText) {
         }
     }
 
+    // Desduplicar importedBatch y nómina local para evitar filas con el mismo ID
+    const uniqueBatchMap = new Map();
+    importedBatch.forEach(p => {
+        if (p && p.id) uniqueBatchMap.set(p.id, p);
+    });
+    const uniqueBatch = Array.from(uniqueBatchMap.values());
+
+    const uniqueNominaMap = new Map();
+    nomina.forEach(p => {
+        if (p && p.id) uniqueNominaMap.set(p.id, p);
+    });
+    nomina = Array.from(uniqueNominaMap.values());
+
     saveNominaLocal();
     renderNomina();
 
     let msg = `Importación local completada:\n- Agregados: ${addedCount}\n- Actualizados: ${updatedCount}`;
 
-    if (isCloudOnline && importedBatch.length > 0) {
+    if (isCloudOnline && uniqueBatch.length > 0) {
         const uploadCloud = confirm(`${msg}\n\n¿Deseas sincronizar estos registros automáticamente con la base de datos Supabase?`);
         if (uploadCloud) {
             try {
-                await DB.importNominaBatch(importedBatch);
+                await DB.importNominaBatch(uniqueBatch);
                 alert("✓ ¡Sincronizado con Supabase con éxito!");
                 showToast("✓ Nómina sincronizada con Supabase", "success");
             } catch (err) {
